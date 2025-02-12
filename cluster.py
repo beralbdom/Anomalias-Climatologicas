@@ -49,25 +49,18 @@ def analise_pca(df_torre, df_indices, n_comp, reg):                             
     scaler = StandardScaler()                                                                                           # Aplicando Z-Scale normalization
     X_norm = scaler.fit_transform(X)
 
-    if n_comp == 0: n_comp = min(X.columns.size, X.index.size)                                                          # Se o número de componentes não for especificado, usa o mínimo entre o número de índices e de amostras
+    # if n_comp == 0: n_comp = min(X.columns.size, X.index.size)                                                          # Se o número de componentes não for especificado, usa o mínimo entre o número de índices e de amostras
     pca = PCA(n_components = n_comp).set_output(transform = 'pandas')
     df_indices_pca = pca.fit_transform(X_norm)
-
-    # for i in range(pca.n_components_):
-    #     loadings = pca.components_[i]
-    #     sorted_idx = np.argsort(np.abs(loadings))[::-1]  # sort by absolute contribution
-    #     print(f"\nPrincipal Component {i+1}:")
-    #     for idx in sorted_idx[:3]:  # top 3
-    #         print(f"  {X.columns[idx]} -> {loadings[idx]}")
     
     fig, ax = plt.subplots(figsize = (6, 3))
     ax.bar(range(1, n_comp + 1), np.cumsum(pca.explained_variance_ratio_))
     # ax.set_ylabel('Explained Variance Ratio')                                                                         # Não sei o nome disso em portugues
-    plt.suptitle(f'Análise de Coordenadas Principais (PCA) - Torre {torre}')
+    plt.suptitle(f'Análise de Componentes Principais (PCA) - Torre {torre}')
     ax.set_xticks(range(1, n_comp + 1))
     # ax.set_xticklabels(range(1, n_componentes + 1))
     plt.tight_layout()
-    plt.savefig(f'Graficos/{reg}/Analise/torre_{torre}.png', transparent = False)
+    plt.savefig(f'Graficos/{reg}/Analise/torre_{torre}.png', transparent = True)
     plt.close()
 
     return df_indices_pca, df_combinado
@@ -75,13 +68,18 @@ def analise_pca(df_torre, df_indices, n_comp, reg):                             
 
 def regressao(df_torres, df_indices, reg, graf = False, debug = False, n_comp = 10, nome_saida = ''):
     torres = df_torres.columns
-    indices = df_indices.columns
     dict_reg_ind = {torre: [] for torre in torres}
     dict_reg_ind_melhor = {torre: [] for torre in torres}
 
     with alive_bar(torres.size, title = f'\n\n  Calculando regressões...', spinner = 'classic', bar = None) as bar:
         for t, torre in enumerate(torres):
-            df_indices_pca, df_combinado = analise_pca(df_torres[[torre]], df_indices, n_comp, reg)                                                # Fazendo PCA torre a torre (colchete duplo resulta num novo dataframe)
+
+            if n_comp != 0: df_indices_pca, df_combinado = analise_pca(df_torres[[torre]], df_indices, n_comp, reg)     # Fazendo PCA torre a torre (colchete duplo resulta num novo dataframe)
+            else: 
+                df_combinado = alinhar_torres_indices(df_torres[[torre]], df_indices)                                   # Alinhando os índices com a torre
+                df_indices_pca = df_combinado.drop(columns = torre)                                                     # Removendo a coluna da torre
+            
+            indices = df_indices_pca.columns
 
             if len(df_combinado.index) <= 12 * 3:
                 if debug: bar.text(f'Menos de 36 amostras para a torre {torre}. Continuando para a próxima...')
@@ -107,7 +105,7 @@ def regressao(df_torres, df_indices, reg, graf = False, debug = False, n_comp = 
                         ax.text(0.05, 0.90, (f'$R^2$: {np.round(r2, 3)}'),
                                 transform = ax.transAxes, fontsize = 8, 
                                 verticalalignment = 'top', bbox = dict(boxstyle = 'round',
-                                facecolor = 'white', edgecolor = 'none'))
+                                facecolor = 'none', edgecolor = 'none'))
 
                 # Não-linear
                 if reg == 'nlinear':
@@ -132,7 +130,7 @@ def regressao(df_torres, df_indices, reg, graf = False, debug = False, n_comp = 
                             ax.text(0.05, 0.90, (f'RMSE: {np.round(r2, 3)}'),
                                     transform = ax.transAxes, fontsize = 8, 
                                     verticalalignment = 'top', bbox = dict(boxstyle = 'round',
-                                    facecolor = 'white', edgecolor = 'none'))
+                                    facecolor = 'none', edgecolor = 'none'))
 
                 # Linear
                 if reg == 'linear':
@@ -142,8 +140,8 @@ def regressao(df_torres, df_indices, reg, graf = False, debug = False, n_comp = 
                         off_best = 0
 
                         # Linear
-                        x = df_indices_pca
-                        y = df_combinado[torre]
+                        x = df_combinado[[indice]]
+                        y = df_combinado[[torre]]
 
                         for offset in offsets:
                             y_shift = y.shift(offset).dropna()                                                          # Fazendo o shift pra comparar com o índice do mês anterior
@@ -186,7 +184,7 @@ def regressao(df_torres, df_indices, reg, graf = False, debug = False, n_comp = 
 
                     # print('    Gerando gráficos para a torre', torre + '...')
                     plt.tight_layout()
-                    plt.savefig(f'Graficos/{reg}/torre_{torre}_{reg}.png', transparent = False)
+                    plt.savefig(f'Graficos/{reg}/torre_{torre}_{reg}.png', transparent = True)
                     plt.close()
 
             except Exception as erro:
@@ -209,46 +207,54 @@ def regressao(df_torres, df_indices, reg, graf = False, debug = False, n_comp = 
         ]
 
     if reg == 'mlinear':
-        reg_ind = pd.DataFrame(reg_ind, columns = ['Torre', 'R^2', 'índices', 'Amostras'])
+        reg_ind = pd.DataFrame(reg_ind, columns = ['Torre', 'R^2', 'Índice', 'Amostras'])
         reg_ind.to_excel(f'Arquivos/Regressao_{reg}{nome_saida}.xlsx', index = False)
 
     if reg == 'linear':
         reg_ind_best = pd.DataFrame(reg_ind_best, columns = ['Torre', 'Índice', 'R^2', 'Offset'])
         reg_ind_best.to_excel(f'Arquivos/Regressao_{reg}{nome_saida}.xlsx', index = False)
 
+        df_lin_pivot = reg_ind_best.pivot_table(index = 'Índice', columns = 'Torre', values = 'R^2')
+        df_lin_pivot.to_excel(f'Arquivos/Regressao_Pivotada_{reg}{nome_saida}.xlsx', index = True)
+        # matriz_corr = df_lin_pivot.corr()
+        # matriz_corr.to_excel(f'Arquivos/Correlacao_{reg}{nome_saida}.xlsx', index = True)
+        dado_corr = df_lin_pivot.T
+        matriz_corr = dado_corr.corr()
+        matriz_corr.to_excel(f'Arquivos/Correlacao_{reg}{nome_saida}.xlsx', index=True)
+
     if reg == 'nlinear':
-        reg_ind = pd.DataFrame(reg_ind, columns = ['Torre', 'RMSE', 'Nº de índices', 'Nº de amostras'])
+        reg_ind = pd.DataFrame(reg_ind, columns = ['Torre', 'RMSE', 'Nº de Índice', 'Nº de amostras'])
         reg_ind.to_excel(f'Arquivos/Regressao_{reg}{nome_saida}.xlsx', index = False)
 
 
-def analisar_offsets(df, torre):
-    torre = int(torre)
-    df_torre = df[df['Torre'] == torre]                                                                                 # Filtrando o dataframe para a torre desejada
-    indices = df_torre['Índice'].unique()                                                                               # Pegando os índices únicos da torre
-    offsets = df_torre['Offset'].unique()                                                                               # Pegando os offsets únicos da torre
+# def analisar_offsets(df, torre):
+#     torre = int(torre)
+#     df_torre = df[df['Torre'] == torre]                                                                                 # Filtrando o dataframe para a torre desejada
+#     indices = df_torre['Índice'].unique()                                                                               # Pegando os índices únicos da torre
+#     offsets = df_torre['Offset'].unique()                                                                               # Pegando os offsets únicos da torre
 
-    # Inicializando a figura
-    cols = 6
-    linhas = int(np.ceil(len(indices) / cols))
-    fig, axs = plt.subplots(linhas, cols, figsize = (15, 2 * linhas), sharey = False)
-    fig.suptitle(f'R$^2$ vs. offsets para a torre {torre}', fontsize = 16)
-    axs = axs.flatten()                                                                                                 # Transformando o array de eixos em um array unidimensional
+#     # Inicializando a figura
+#     cols = 6
+#     linhas = int(np.ceil(len(indices) / cols))
+#     fig, axs = plt.subplots(linhas, cols, figsize = (15, 2 * linhas), sharey = False)
+#     fig.suptitle(f'R$^2$ vs. offsets para a torre {torre}', fontsize = 16)
+#     axs = axs.flatten()                                                                                                 # Transformando o array de eixos em um array unidimensional
 
-    # Plotando os gráficos da torre para cada índice
-    for i, indice in enumerate(indices):
-        r2 = df_torre[df_torre['Índice'] == indice]['R^2']
-        offsets = df_torre[df_torre['Índice'] == indice]['Offset']
-        axs[i].bar(offsets, r2, color = '#0c274a')
-        axs[i].set_title(indice)
-        axs[i].set_xticks(offsets, labels = offsets, fontsize = 7)
+#     # Plotando os gráficos da torre para cada índice
+#     for i, indice in enumerate(indices):
+#         r2 = df_torre[df_torre['Índice'] == indice]['R^2']
+#         offsets = df_torre[df_torre['Índice'] == indice]['Offset']
+#         axs[i].bar(offsets, r2, color = '#0c274a')
+#         axs[i].set_title(indice)
+#         axs[i].set_xticks(offsets, labels = offsets, fontsize = 7)
 
-    # Removendo os eixos que não foram utilizados
-    for j in range(i + 1, len(axs)):
-        fig.delaxes(axs[j])
+#     # Removendo os eixos que não foram utilizados
+#     for j in range(i + 1, len(axs)):
+#         fig.delaxes(axs[j])
 
-    plt.tight_layout()
-    plt.savefig(f'Graficos/Dist/Offsets torre {torre}.svg', transparent = True)
-    plt.close()
+#     plt.tight_layout()
+#     plt.savefig(f'Graficos/Dist/Offsets torre {torre}.svg', transparent = True)
+#     plt.close()
 
 
 def calc_clusters(arq, dist, lim):
@@ -282,115 +288,115 @@ def calc_clusters(arq, dist, lim):
     return X, grupos, df_clust, dado_corr
 
 
-def plot_corr(X, grupos, df_clust, dado_corr, excl = []):
-    '''
-    Função para plotar os gráficos de dendrograma e de correlações para cada grupo de torres. \\
-    Os resultados são salvos em 'Graficos/Grupos/Dendrograma.svg' e 'Graficos/Grupos/Grupo {grupo} Indices.svg'.
+# def plot_corr(X, grupos, df_clust, dado_corr, excl = []):
+#     '''
+#     Função para plotar os gráficos de dendrograma e de correlações para cada grupo de torres. \\
+#     Os resultados são salvos em 'Graficos/Grupos/Dendrograma.svg' e 'Graficos/Grupos/Grupo {grupo} Indices.svg'.
 
-    Parâmetros:
-    -----------
-    X : ndarray \\
-        Matriz de distâncias
-    grupos : list \\
-        Lista com os grupos de torres
-    df_clust : DataFrame \\
-        DataFrame com os grupos de torres
-    dado_corr : DataFrame \\
-        DataFrame com a matriz de correlações
-    excl : list \\
-        Lista com os grupos a serem excluídos. Default = []
-    '''
+#     Parâmetros:
+#     -----------
+#     X : ndarray \\
+#         Matriz de distâncias
+#     grupos : list \\
+#         Lista com os grupos de torres
+#     df_clust : DataFrame \\
+#         DataFrame com os grupos de torres
+#     dado_corr : DataFrame \\
+#         DataFrame com a matriz de correlações
+#     excl : list \\
+#         Lista com os grupos a serem excluídos. Default = []
+#     '''
 
-    grupos = np.setdiff1d(grupos, excl)                                                                                 # Excluindo os grupos desejados
+#     grupos = np.setdiff1d(grupos, excl)                                                                                 # Excluindo os grupos desejados
 
-    # Plotando o dendrograma
-    fig, ax = plt.subplots(figsize = (25, 10))
-    plt.title('Dendrograma de clusterização', fontsize = 10)
-    plt.xlabel('Torres')
-    plt.ylabel('Distância')
-    spc.dendrogram(X, leaf_rotation = 90, leaf_font_size = 4)
-    plt.axhline(10, )
-    plt.savefig('Graficos/Grupos/Dendrograma.svg', transparent = True)
-    plt.close()
+#     # Plotando o dendrograma
+#     fig, ax = plt.subplots(figsize = (25, 10))
+#     plt.title('Dendrograma de clusterização', fontsize = 10)
+#     plt.xlabel('Torres')
+#     plt.ylabel('Distância')
+#     spc.dendrogram(X, leaf_rotation = 90, leaf_font_size = 4)
+#     plt.axhline(10, )
+#     plt.savefig('Graficos/Grupos/Dendrograma.svg', transparent = True)
+#     plt.close()
 
-    # Plotando os gráficos de correlações para cada grupo
-    for grupo in grupos:
-        fig, ax = plt.subplots(1, 3, figsize = (12, 6))
-        colunas_plot = df_clust[df_clust['Grupo'] == grupo]['Torre'].astype(int).tolist()                               # Pegando as torres do grupo desejado e convertendo para int
-        dado_corr_valido = dado_corr.loc[:, (slice(None), colunas_plot)]                                                # Filtrando as torres do grupo desejado
-        dado_corr_valido.plot(ax = ax[0], legend = False)                                                               # Plotando o comportamento das torres
+#     # Plotando os gráficos de correlações para cada grupo
+#     for grupo in grupos:
+#         fig, ax = plt.subplots(1, 3, figsize = (12, 6))
+#         colunas_plot = df_clust[df_clust['Grupo'] == grupo]['Torre'].astype(int).tolist()                               # Pegando as torres do grupo desejado e convertendo para int
+#         dado_corr_valido = dado_corr.loc[:, (slice(None), colunas_plot)]                                                # Filtrando as torres do grupo desejado
+#         dado_corr_valido.plot(ax = ax[0], legend = False)                                                               # Plotando o comportamento das torres
 
-        ax[0].set_title('Comportamento das torres por índice', fontsize = 10)
-        ax[0].tick_params(axis = 'x')
-        ax[0].set_yticks(np.arange(0, 1.2, 0.2))
-        ax[0].set_xticks(np.arange(len(dado_corr.index)))
-        ax[0].set_xticklabels(dado_corr.index, fontsize = 8, rotation = 90)
+#         ax[0].set_title('Comportamento das torres por índice', fontsize = 10)
+#         ax[0].tick_params(axis = 'x')
+#         ax[0].set_yticks(np.arange(0, 1.2, 0.2))
+#         ax[0].set_xticks(np.arange(len(dado_corr.index)))
+#         ax[0].set_xticklabels(dado_corr.index, fontsize = 8, rotation = 90)
 
-        matriz_corr = dado_corr_valido.corr()                                                                           # Calculando a matriz de correlações do grupo desejado 
-        matriz_sup_ind = np.triu_indices_from(matriz_corr, k = 1)                                                       # Pegando os índices da matriz triangular superior
-        matriz_sup = matriz_corr.values[matriz_sup_ind]                                                                 # Filtrando os valores da matriz triangular superior
-        ax[1].hist(matriz_sup, bins = np.arange(0, 1.1, 0.1), color = '#FAAF17', edgecolor = 'black')
-        ax[1].set_title('Distribuição de correlações entre torres', fontsize = 10)
-        ax[1].tick_params(axis = 'x')
-        ax[1].set_xticks(np.arange(0, 1.1, 0.1))
-        ax[1].set_yticks(ax[1].get_yticks())
-        ax[1].set_yticklabels([str(int(x)) + '%' for x in ax[1].get_yticks() * 100 / len(matriz_sup)])
+#         matriz_corr = dado_corr_valido.corr()                                                                           # Calculando a matriz de correlações do grupo desejado 
+#         matriz_sup_ind = np.triu_indices_from(matriz_corr, k = 1)                                                       # Pegando os índices da matriz triangular superior
+#         matriz_sup = matriz_corr.values[matriz_sup_ind]                                                                 # Filtrando os valores da matriz triangular superior
+#         ax[1].hist(matriz_sup, bins = np.arange(0, 1.1, 0.1), color = '#FAAF17', edgecolor = 'black')
+#         ax[1].set_title('Distribuição de correlações entre torres', fontsize = 10)
+#         ax[1].tick_params(axis = 'x')
+#         ax[1].set_xticks(np.arange(0, 1.1, 0.1))
+#         ax[1].set_yticks(ax[1].get_yticks())
+#         ax[1].set_yticklabels([str(int(x)) + '%' for x in ax[1].get_yticks() * 100 / len(matriz_sup)])
 
-        cax = ax[2].matshow(dado_corr_valido, cmap = 'RdYlGn', vmin = 0, vmax = 1)                                      # Plotando a matriz de correlações
-        fig.colorbar(cax, ax = ax[2], fraction = .0566, pad = .025)
+#         cax = ax[2].matshow(dado_corr_valido, cmap = 'RdYlGn', vmin = 0, vmax = 1)                                      # Plotando a matriz de correlações
+#         fig.colorbar(cax, ax = ax[2], fraction = .0566, pad = .025)
 
-        ax[2].set_xticks(np.arange(len(colunas_plot)))
-        ax[2].set_yticks(np.arange(len(dado_corr_valido.index)))
-        ax[2].set_xticklabels(colunas_plot, rotation = 90, fontsize = 7)
-        ax[2].set_yticklabels(dado_corr_valido.index, fontsize = 7)
-        ax[2].grid(False)
-        ax[2].xaxis.set_ticks_position('bottom')
+#         ax[2].set_xticks(np.arange(len(colunas_plot)))
+#         ax[2].set_yticks(np.arange(len(dado_corr_valido.index)))
+#         ax[2].set_xticklabels(colunas_plot, rotation = 90, fontsize = 7)
+#         ax[2].set_yticklabels(dado_corr_valido.index, fontsize = 7)
+#         ax[2].grid(False)
+#         ax[2].xaxis.set_ticks_position('bottom')
 
-        # https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.legend.html                                       # Adicionando a legenda fora do gráfico
-        handles, labels = ax[0].get_legend_handles_labels()
-        fig.legend(handles, labels, loc = 'lower center', ncol = 5, fontsize = 7, bbox_to_anchor = (0.5, 0), 
-               edgecolor = 'black', frameon = False, fancybox = False)
+#         # https://matplotlib.org/stable/api/_as_gen/matplotlib.pyplot.legend.html                                       # Adicionando a legenda fora do gráfico
+#         handles, labels = ax[0].get_legend_handles_labels()
+#         fig.legend(handles, labels, loc = 'lower center', ncol = 5, fontsize = 7, bbox_to_anchor = (0.5, 0), 
+#                edgecolor = 'black', frameon = False, fancybox = False)
 
-        fig.suptitle('Análise do grupo '+ str(grupo), fontsize = 14)
-        plt.tight_layout(rect = [0, .18, 1, 0.96])
-        plt.savefig('Graficos/Grupos/Grupo ' + str(grupo) + ' Indices.png', transparent = False)
-        plt.close()
+#         fig.suptitle('Análise do grupo '+ str(grupo), fontsize = 14)
+#         plt.tight_layout(rect = [0, .18, 1, 0.96])
+#         plt.savefig('Graficos/Grupos/Grupo ' + str(grupo) + ' Indices.png', transparent = False)
+#         plt.close()
 
 
-def plot_dist_ind(df):
-    '''
-    Função para plotar os gráficos de distribuição de offsets para cada índice. \\
-    Os resultados são salvos em 'Graficos/Dist/Distr. offsets.svg' e 'Graficos/Dist/Offsets otimos torre {torre}.svg'.
+# def plot_dist_ind(df):
+#     '''
+#     Função para plotar os gráficos de distribuição de offsets para cada índice. \\
+#     Os resultados são salvos em 'Graficos/Dist/Distr. offsets.svg' e 'Graficos/Dist/Offsets otimos torre {torre}.svg'.
 
-    Parâmetros:
-    -----------
-    df : DataFrame \\
-        DataFrame com os dados de regressão (a partir de Regressao_offsets.xlsx) 
-    '''
+#     Parâmetros:
+#     -----------
+#     df : DataFrame \\
+#         DataFrame com os dados de regressão (a partir de Regressao_offsets.xlsx) 
+#     '''
 
-    # Pegando as torres e índices únicos
-    indices = df['Índice'].unique()
-    torres = df['Torre'].unique()
+#     # Pegando as torres e índices únicos
+#     indices = df['Índice'].unique()
+#     torres = df['Torre'].unique()
  
-    cols = 6
-    linhas = (len(indices) + cols - 1) // cols
-    fig, axes = plt.subplots(linhas, cols, figsize = (15, 2 * linhas))
-    axes = axes.flatten()
+#     cols = 6
+#     linhas = (len(indices) + cols - 1) // cols
+#     fig, axes = plt.subplots(linhas, cols, figsize = (15, 2 * linhas))
+#     axes = axes.flatten()
 
-    for i, indice in enumerate(indices):
-        indice_data = df[df['Índice'] == indice]
-        offset_counts = indice_data['Offset'].value_counts().sort_index()                                               # https://pandas.pydata.org/docs/reference/api/pandas.Series.value_counts.html
+#     for i, indice in enumerate(indices):
+#         indice_data = df[df['Índice'] == indice]
+#         offset_counts = indice_data['Offset'].value_counts().sort_index()                                               # https://pandas.pydata.org/docs/reference/api/pandas.Series.value_counts.html
 
-        axes[i].bar(offset_counts.index, offset_counts.values, color = '#0c274a')
-        axes[i].set_xticks(offset_counts.index, labels = offset_counts.index, fontsize = 7)
-        axes[i].set_title(indice)
-        axes[i].set_xlabel('Offsets', fontsize = 6)
-        axes[i].set_ylabel('Ocorrências', fontsize = 6)
+#         axes[i].bar(offset_counts.index, offset_counts.values, color = '#0c274a')
+#         axes[i].set_xticks(offset_counts.index, labels = offset_counts.index, fontsize = 7)
+#         axes[i].set_title(indice)
+#         axes[i].set_xlabel('Offsets', fontsize = 6)
+#         axes[i].set_ylabel('Ocorrências', fontsize = 6)
 
-    # Removendo os eixos que não foram utilizados
-    for j in range(i + 1, len(axes)):
-        fig.delaxes(axes[j])
+#     # Removendo os eixos que não foram utilizados
+#     for j in range(i + 1, len(axes)):
+#         fig.delaxes(axes[j])
 
-    fig.suptitle(f'Distribuição de offsets para cada índice', fontsize = 16)
-    plt.tight_layout()
-    plt.savefig('Graficos/Dist/Distr. offsets.svg', transparent = True)
+#     fig.suptitle(f'Distribuição de offsets para cada índice', fontsize = 16)
+#     plt.tight_layout()
+#     plt.savefig('Graficos/Dist/Distr. offsets.svg', transparent = True)

@@ -55,9 +55,16 @@ df_ind.index = pd.to_datetime(df_ind.index).to_period('M')
 df_clusters = pd.read_csv('Arquivos/ClustersAnomMen.csv', sep = ';').set_index('timestamp')
 df_clusters.index = pd.to_datetime(df_clusters.index).to_period('M')
 
-# regressao(df_torres, df_ind, 'mlinear', graf = True, debug = True, n_comp = 0, nome_saida = '_torres_MAXcomp')
+matriz_corr_clusters = df_clusters.corr().replace(np.nan, 0)
+matriz_corr_clusters.to_excel('Arquivos/Correlacao_linear_clusters_Series.xlsx')
+
+df_combinado = pd.concat([df_ind, df_clusters], axis = 1)
+matriz_corr_tudo = df_combinado.corr().replace(np.nan, 0)
+matriz_corr_tudo.to_excel('Arquivos/Correlacoes_Clusters_Indices.xlsx')
+
+# regressao(df_clusters, df_ind, 'linear', graf = False, debug = True, n_comp = 0, nome_saida = '_clusters')
 # regressao(df_clusters, df_ind, 'mlinear', graf = True, debug = True, n_comp = 0, nome_saida = '_clusters_MAXcomp')
-regressao(df_clusters, df_ind, 'nlinear', graf = True, debug = True, n_comp = 0, nome_saida = '_clusters_MAXcomp')
+# regressao(df_clusters, df_ind, 'nlinear', graf = True, debug = True, n_comp = 0, nome_saida = '_clusters_MAXcomp')
 
 # dados_regressao = pd.read_excel('Arquivos/Regressao_mlinear_torres_MAXcomp.xlsx')
 # dados_regressao = dados_regressao.set_index('Torre')

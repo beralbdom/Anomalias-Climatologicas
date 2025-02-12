@@ -34,29 +34,3 @@ print(f'Treino : {data_train.index.min()} - {data_train.index.max()} (n = {len(d
 print(f'Teste  : {data_test.index.min()} - {data_test.index.max()} (n = {len(data_test)})\n')
 
 # -------------------------------------------------------------------------------------------------------------------- #
-
-# kpss_test = KPSS(data_train['velocidade'])
-# print(kpss_test.summary().as_text())
-# fig, axs = plt.subplots(2, 1, figsize = (6, 3))
-# axs[0].plot(data, label = 'original')
-# plt.show()
-
-forecaster = ForecasterAutoreg(
-                    regressor = RandomForestRegressor(n_estimators = 500, 
-                                                      criterion = 'squared_error', 
-                                                      max_features = 1, 
-                                                      n_jobs = -1, 
-                                                      verbose = 1),
-                    lags      = 6)
-forecaster.fit(y = data,
-               exog = data_train[['AMM', 'AO', 'TNA']])
-
-prev = forecaster.predict(steps = 36,
-                          exog = data_test[['AMM', 'AO', 'TNA']])
-# prev = pd.Series(data = prev, index = data_test.index)
-
-fig, ax = plt.subplots(1, 1, figsize = (6, 3))
-ax.plot(data_train['velocidade'], label = 'treino')
-ax.plot(data_test['velocidade'], label = 'teste')
-ax.plot(prev, label = 'previsao')
-ax.legend(); plt.show()
